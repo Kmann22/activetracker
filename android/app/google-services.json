@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "651034106279",
+    "project_id": "activetracker-b0a69",
+    "storage_bucket": "activetracker-b0a69.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:651034106279:android:1cb146be6d3f2ab89dfe82",
+        "android_client_info": {
+          "package_name": "com.example.activetracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzQsRMxYhOCt0Ps-A950tEdNE_7stvolA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
