@@ -11,20 +11,24 @@ class LoginPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          'Login',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.deepPurple,
-      ),
       body: Padding(
         padding: EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Title
+            Text(
+              'Login',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.deepPurple,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 32),
+
             // Email TextField
             TextField(
               controller: _emailController,
@@ -74,7 +78,7 @@ class LoginPage extends StatelessWidget {
                   // If sign-in is successful, navigate to PedometerPage
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => Pedometer()),
+                    MaterialPageRoute(builder: (context) => ActivityTracker()),
                   );
                 } catch (e) {
                   // Show error message

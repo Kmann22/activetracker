@@ -1,26 +1,29 @@
 import 'package:activetracker/pages/leaderboard.dart';
+import 'package:activetracker/pages/login.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sensors/flutter_sensors.dart';
 import 'package:camera/camera.dart';
+import 'package:hive/hive.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:path_provider/path_provider.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-class Pedometer extends StatefulWidget {
+class ActivityTracker extends StatefulWidget {
   @override
-  _PedometerState createState() => _PedometerState();
+  _ActivityTrackerState createState() => _ActivityTrackerState();
 }
 
-class _PedometerState extends State<Pedometer> {
+class _ActivityTrackerState extends State<ActivityTracker> {
   int _stepCount = 0;
   bool _tracking = false;
   late StreamSubscription _accelerometerSubscription;
@@ -34,11 +37,23 @@ class _PedometerState extends State<Pedometer> {
   DateTime? _startTime;
   DateTime? _endTime;
 
+  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  late Box activityBox;
+
   @override
   void initState() {
     super.initState();
+    _initializeHive();
     _initializeCamera();
     _initializeNotifications();
+    _initializeFirebaseMessaging();
+  }
+
+  Future<void> _initializeHive() async {
+    final Directory appDocDir = await getApplicationDocumentsDirectory();
+    Hive.init(appDocDir.path);
+    activityBox = await Hive.openBox('activityData');
+    _loadActivityDataFromLocalStorage();
   }
 
   Future<void> _initializeCamera() async {
@@ -58,7 +73,29 @@ class _PedometerState extends State<Pedometer> {
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
+  Future<void> _initializeFirebaseMessaging() async {
+    NotificationSettings settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null) {
+        print('Message title: ${message.notification?.title}');
+        print('Message body: ${message.notification?.body}');
+      }
+    });
+
+    String? token = await _firebaseMessaging.getToken();
+    print("FCM Token: $token");
+  }
+
   Future<void> _startTracking() async {
+    setState(() {
+      _tracking = true;
+    });
+
     _startTime = DateTime.now();
 
     final hasAccelerometer =
@@ -85,27 +122,18 @@ class _PedometerState extends State<Pedometer> {
         _processGyroscopeData(event.data[0], event.data[1], event.data[2]);
       });
     }
-
-    setState(() {
-      _tracking = true;
-    });
   }
 
   void _stopTracking() async {
     _endTime = DateTime.now();
-
-    // Save data to Firebase
-    await _sendDataToFirebase();
-
-    // Cancel sensor subscriptions
     _accelerometerSubscription.cancel();
     _gyroscopeSubscription.cancel();
-
-    // Reset the step count
+    await _sendDataToFirebase();
     setState(() {
-      _stepCount = 0; // Reset the step count
-      _tracking = false; // Update the tracking state
+      _tracking = false;
+      _stepCount = 0;
     });
+    _clearLocalData();
   }
 
   void _processAccelerometerData(double x, double y, double z) {
@@ -120,7 +148,8 @@ class _PedometerState extends State<Pedometer> {
 
       if (_stepCount == 10) {
         _capturePhoto();
-        _showStepCompletionNotification();
+        _sendNotification();
+        // _saveActivityDataToLocalStorage();
       }
     } else if (delta < 1.0) {
       _isStep = false;
@@ -137,7 +166,6 @@ class _PedometerState extends State<Pedometer> {
     try {
       final image = await _cameraController?.takePicture();
       if (image != null) {
-        // Upload photo to Firebase Storage
         final file = File(image.path);
         final storageRef = FirebaseStorage.instance
             .ref()
@@ -147,7 +175,6 @@ class _PedometerState extends State<Pedometer> {
         final snapshot = await uploadTask.whenComplete(() => {});
         final downloadUrl = await snapshot.ref.getDownloadURL();
 
-        // Save the download URL in the Firestore document
         setState(() {
           _capturedImagePath = downloadUrl;
         });
@@ -159,48 +186,45 @@ class _PedometerState extends State<Pedometer> {
     }
   }
 
-  Future<void> _showStepCompletionNotification() async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'step_channel_id',
-      'step_channel_name',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: false,
-    );
+  Future<void> _sendNotification() async {
+    try {
+      RemoteMessage message = RemoteMessage(
+        notification: RemoteNotification(
+          title: 'Congratulations!',
+          body: 'You have completed $_stepCount steps.',
+        ),
+      );
 
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      'Congratulations!',
-      'You have completed $_stepCount steps.',
-      platformChannelSpecifics,
-      payload: 'item x',
-    );
+      // ignore: deprecated_member_use
+      await FirebaseMessaging.instance
+          .sendMessage(messageId: "1903365579437680119");
+    } catch (e) {
+      print("Error sending notification: $e");
+    }
   }
 
   Future<void> _sendDataToFirebase() async {
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
     final user = FirebaseAuth.instance.currentUser;
+
     String timestampString =
         DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
 
+    print("OK2");
     await firestore
-        .collection('users') // Users collection
-        .doc(user?.email) // Document corresponding to the user's email
+        .collection('users')
+        .doc(user?.email)
         .collection('steps')
-        .doc(timestampString) // New collection named as the timestamp
+        .doc(timestampString)
         .set({
       'stepCount': _stepCount,
       'startTime': _startTime?.toIso8601String(),
       'endTime': _endTime?.toIso8601String(),
-      'photoUrl': _capturedImagePath, // Store the photo URL
+      'photoUrl': _capturedImagePath,
       'timestamp': FieldValue.serverTimestamp(),
     });
 
+    print("OK");
     final DocumentReference globalStepsRef =
         firestore.collection('users').doc(user?.email);
     await firestore.runTransaction((transaction) async {
@@ -218,11 +242,11 @@ class _PedometerState extends State<Pedometer> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user != null) {
-      // Fetch the total steps from Firestore
       final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+      // Fetch user's total steps
       final DocumentSnapshot userDoc =
           await firestore.collection('users').doc(user.email).get();
-
       int totalSteps = userDoc['totalSteps'] ?? 0;
 
       showDialog(
@@ -230,14 +254,16 @@ class _PedometerState extends State<Pedometer> {
         builder: (context) {
           return AlertDialog(
             title: Text('Profile'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Name: ${user.displayName ?? 'N/A'}'),
-                Text('Email: ${user.email ?? 'N/A'}'),
-                Text('Total Steps: $totalSteps'),
-              ],
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Name: ${user.displayName ?? 'N/A'}'),
+                  Text('Email: ${user.email ?? 'N/A'}'),
+                  Text('Total Steps: $totalSteps'),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -248,10 +274,10 @@ class _PedometerState extends State<Pedometer> {
               ),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pop(); // Close the profile dialog
-                  _showLeaderboard(); // Open the leaderboard
+                  Navigator.of(context).pop(); // Close the dialog
+                  _showLeaderboard();
                 },
-                child: Text('Leaderboard'),
+                child: Text('View Leaderboard'),
               ),
             ],
           );
@@ -268,7 +294,31 @@ class _PedometerState extends State<Pedometer> {
 
   void _logout() async {
     await FirebaseAuth.instance.signOut();
-    Navigator.of(context).pop(); // Go back to the login screen
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => LoginPage()),
+    );
+  }
+
+  void _saveActivityDataToLocalStorage() {
+    activityBox.put('stepCount', _stepCount);
+    activityBox.put('startTime', _startTime?.toIso8601String());
+    activityBox.put('endTime', _endTime?.toIso8601String());
+    activityBox.put('photoPath', _capturedImagePath);
+  }
+
+  void _loadActivityDataFromLocalStorage() {
+    setState(() {
+      _stepCount = activityBox.get('stepCount', defaultValue: 0);
+      _startTime = DateTime.parse(activityBox.get('startTime',
+          defaultValue: DateTime.now().toIso8601String()));
+      _endTime = DateTime.parse(activityBox.get('endTime',
+          defaultValue: DateTime.now().toIso8601String()));
+      _capturedImagePath = activityBox.get('photoPath');
+    });
+  }
+
+  void _clearLocalData() {
+    activityBox.clear();
   }
 
   @override
@@ -276,10 +326,10 @@ class _PedometerState extends State<Pedometer> {
     _accelerometerSubscription.cancel();
     _gyroscopeSubscription.cancel();
     _cameraController?.dispose();
+    activityBox.close();
     super.dispose();
   }
 
-  @override
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -305,7 +355,6 @@ class _PedometerState extends State<Pedometer> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Displaying the steps count in a card
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -348,8 +397,6 @@ class _PedometerState extends State<Pedometer> {
               ),
             ),
             SizedBox(height: 20),
-
-            // Start/Stop tracking button
             ElevatedButton(
               onPressed: _tracking ? _stopTracking : _startTracking,
               style: ElevatedButton.styleFrom(
@@ -365,8 +412,6 @@ class _PedometerState extends State<Pedometer> {
               ),
             ),
             SizedBox(height: 20),
-
-            // Display the captured image if available
             if (_capturedImagePath != null)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

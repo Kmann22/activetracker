@@ -1,5 +1,6 @@
 import 'package:activetracker/pages/login.dart';
 import 'package:activetracker/pages/pedometer.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -7,10 +8,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart'; // Import Firebase core package
 import 'package:activetracker/pages/login.dart';
 import 'package:activetracker/pages/pedometer.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await Hive.openBox('activityData'); // Open Hive box for activity data
   await Firebase.initializeApp(); // Initialize Firebase
+  final fcmToken = await FirebaseMessaging.instance.getToken();
+  print(fcmToken);
   runApp(MyApp());
 }
 
@@ -37,7 +44,7 @@ class AuthCheck extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.active) {
           if (snapshot.hasData) {
-            return Pedometer(); // User is signed in
+            return ActivityTracker(); // User is signed in
           } else {
             return LoginPage(); // User is not signed in
           }

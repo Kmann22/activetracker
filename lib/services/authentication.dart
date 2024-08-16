@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
@@ -17,6 +18,12 @@ class AuthService {
       await userCredential.user?.updateProfile(displayName: name);
       await userCredential.user?.reload();
 
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        FirebaseFirestore.instance.collection('users').doc(user.email).set(
+            {'userName': user.displayName ?? 'Anonymous'},
+            SetOptions(merge: true));
+      }
       // Optionally: Add additional user data to Firestore or Realtime Database
       // await FirebaseFirestore.instance.collection('users').doc(userCredential.user?.uid).set({
       //   'name': name,
@@ -45,6 +52,13 @@ class AuthService {
         email: email,
         password: password,
       );
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        FirebaseFirestore.instance.collection('users').doc(user.email).set(
+            {'userName': user.displayName ?? 'Anonymous', 'totalSteps': 0},
+            SetOptions(merge: true));
+      }
     } on FirebaseAuthException catch (e) {
       // Handle specific FirebaseAuth exceptions
       switch (e.code) {
