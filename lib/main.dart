@@ -1,9 +1,11 @@
+import 'package:activetracker/consts.dart';
 import 'package:activetracker/pages/login.dart';
 import 'package:activetracker/pages/pedometer.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart'; // Import Firebase core package
 import 'package:activetracker/pages/login.dart';
@@ -12,13 +14,20 @@ import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await Hive.openBox('activityData'); // Open Hive box for activity data
   await Firebase.initializeApp(); // Initialize Firebase
   final fcmToken = await FirebaseMessaging.instance.getToken();
   print(fcmToken);
+
+  await _setupStripe();
+
   runApp(MyApp());
+}
+
+Future<void> _setupStripe() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  Stripe.publishableKey = stripePublishableKey;
 }
 
 class MyApp extends StatelessWidget {

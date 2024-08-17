@@ -1,5 +1,6 @@
 import 'package:activetracker/pages/leaderboard.dart';
 import 'package:activetracker/pages/login.dart';
+import 'package:activetracker/pages/menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sensors/flutter_sensors.dart';
 import 'package:camera/camera.dart';
@@ -196,8 +197,7 @@ class _ActivityTrackerState extends State<ActivityTracker> {
       );
 
       // ignore: deprecated_member_use
-      await FirebaseMessaging.instance
-          .sendMessage(messageId: "1903365579437680119");
+      await FirebaseMessaging.instance.sendMessage();
     } catch (e) {
       print("Error sending notification: $e");
     }
@@ -408,6 +408,26 @@ class _ActivityTrackerState extends State<ActivityTracker> {
               ),
               child: Text(
                 _tracking ? 'Stop Tracking' : 'Start Tracking',
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                      builder: (context) => HardwareFeaturesMenu()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(vertical: 15),
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                'Hardware Features',
                 style: TextStyle(fontSize: 18),
               ),
             ),
